@@ -16,49 +16,43 @@ server.on('request', (req, res) => {
     return;
   }
 
-  const writeFile = fs.createWriteStream(filepath);
-  const limitedStream = new LimitSizeStream({ limit: 1000000 });
-
-  req.on('aborted', () => {
-    fs.unlink(filepath, (err) => {
-      if (err) console.error('unlink error: ', err);
-    });
-  });
-
-  limitedStream.on('error', (err) => {
-    if (err.code === 'LIMIT_EXCEEDED') {
-      writeFile.destroy();
-      fs.unlink(filepath, (err) => {
-        if (err) console.error('unlink error: ', err);
-      });
-      res.statusCode = 413;
-      res.end('File limit exceeded');
-    }
-  });
-
-  writeFile.on('finish', () => {
-    res.statusCode = 201;
-    res.end('Successfully created');
-  });
-
   switch (req.method) {
     case 'POST':
       fs.access(filepath, fs.constants.F_OK, (err) => {
-        if (err) {
-          req.pipe(limitedStream).pipe(writeFile);
-
-          const data = [];
-          req.on('data', (chunk) => {
-            data.push(chunk);
-          });
-          req.on('end', () => {
-            if (data.length === 0) {
-
-            }
-          });
-        } else {
+        if (!err) {
           res.statusCode = 409;
           res.end('Already exists');
+        } else {
+          const writeFile = fs.createWriteStream(filepath);
+          const limitedStream = new LimitSizeStream({limit: 1000000});
+
+          req
+              .on('aborted', () => {
+                fs.unlink(filepath, (err) => {
+                  if (err) console.error('unlink error: ', err);
+                });
+              })
+              .pipe(limitedStream)
+              .on('error', (err) => {
+                if (err.code === 'LIMIT_EXCEEDED') {
+                  writeFile.destroy();
+                  fs.unlink(filepath, (err) => {
+                    if (err) console.error('unlink error: ', err);
+                  });
+                  res.statusCode = 413;
+                  res.end('File limit exceeded');
+                }
+              })
+              .pipe(writeFile)
+              .on('error', (err) => {
+                console.error('writing error: ', err);
+                res.statusCode = 500;
+                res.end('Internal server error');
+              })
+              .on('finish', () => {
+                res.statusCode = 201;
+                res.end('Successfully created');
+              });
         }
       });
       break;
