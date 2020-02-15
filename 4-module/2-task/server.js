@@ -4,7 +4,6 @@ const path = require('path');
 const fs = require('fs');
 const LimitSizeStream = require('./LimitSizeStream');
 
-
 const server = new http.Server();
 
 server.on('request', (req, res) => {
